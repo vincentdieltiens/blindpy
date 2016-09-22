@@ -1,114 +1,46 @@
-import hid, time
-import datetime as dt
-from threading import Timer, Lock
+from datetime import datetime
 
-LOCK = Lock()
+from controller import ControllerSignal, BuzzerController
+from buzzer_lights import BuzzerLights
 
-class Buzzer:
-	def __init__(self):
-		self.devices = []
-		self.buzz = []
+class Buzzer():
+	def __init__(self, devices):
+		self.devices = devices
+		self.controllers = []
 		self.lights = []
 		
-		#print hid.enumerate(0x054c, 0x1000)
-		for deviceIndex, d in enumerate(hid.enumerate(0x054c, 0x1000)):
-			dev = hid.device(0x054c, 0x1000, d["path"])
-			dev.set_nonblocking(True)
-		
-			for i in range(0, 10):
-				dev.read(5)
-			self.devices.append(dev)
+		for device_index, dev in enumerate(devices):
+			buzz_lights = BuzzerLights(dev)
+			self.lights.append(buzz_lights)
+			
+			self.controllers.append([])
+			for i in range(0, 4):
+				controller = BuzzerController(dev, i, buzz_lights)
+				self.controllers[device_index].append(controller)
+			
+	def get_lights(self, device_index):
+		return self.lights[device_index]
+	
+	def get_devices(self):
+		return self.devices
 
-			#self.lights.append([])
-			#for x in range(0, 4):
-			#lights = [0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0]
-			self.lights.append([0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0])
-			#self.lights[deviceIndex] = lights
-		
-	def count(self):
-		return len(self.devices)
+	def get_controllers(self, device_index):
+		return self.controllers[device_index]
+	
+	def get_controller(self, device_index, controller_index):
+		return self.controllers[device_index][controller_index]
 
-	def turnOn(self, deviceIndex, buzzIndex, duration=None, after=None):
-		lights = self.lights[deviceIndex]
-		lights[buzzIndex + 2] = 0xFF
-		
-		self.devices[deviceIndex].write(lights)
-		
-		if duration:
-			t = Timer(duration, self.turnOff, (deviceIndex, buzzIndex, after))
-			t.start()
-			#self.turnOff(deviceIndex, buzzIndex)
-
-	def turnOff(self, deviceIndex, buzzIndex, after=None):
-		lights = self.lights[deviceIndex]
-		lights[buzzIndex + 2] = 0x0
-		self.devices[deviceIndex].write(lights)
-
-		if after:
-			after()
-
-	def waitClick(self, deviceIndex=None, buzzIndex=None):
-		def isValid(data):
-			return data is not None and len(data) > 2 and (data[2] > 0 or data[3] > 0 or data[4] > 240)
-
-		def isActive(i):
-			if deviceIndex is not None and buzzIndex is not None:
-				info = getInfo(i)
-				return info['buzz'] == buzzIndex
-			return False
-
-		def getInfo(i):
-			return {'buzz': i//5, 'button': i % 5}
-
-		answers = [
-			#1
-			[0, 0, 1, 0, 240],
-			[0, 0, 16, 0, 240],
-			[0, 0, 8, 0, 240],
-			[0, 0, 4, 0, 240],
-			[0, 0, 2, 0, 240],
-			#2
-			[0, 0, 32, 0, 240],
-			[0, 0, 0, 2, 240],
-			[0, 0, 0, 1, 240],
-			[0, 0, 128, 0, 240],
-			[0, 0, 64, 0, 240],
-			#3
-			[0, 0, 0, 4, 240],
-			[0, 0, 0, 64, 240],
-			[0, 0, 0, 32, 240],
-			[0, 0, 0, 16, 240],
-			[0, 0, 0, 8, 240],
-			#
-			[0, 0, 0, 128, 240],
-			[0, 0, 0, 0, 248],
-			[0, 0, 0, 0, 244],
-			[0, 0, 0, 0, 242],
-			[0, 0, 0, 0, 241]
-		]
-
+	def read(self, device_index=None, controller_index=None, 
+		     button_index=None, timeout=None):
+		start_time = datetime.now()
 		while 1:
+			stop_time = datetime.now()
+			delta = stop_time - start_time
+
+			if timeout is not None and delta.seconds > timeout:
+				return None
+
 			for device in self.devices:
-				data = device.read(5)
-				
-				if isValid(data):
-					for i, d in enumerate(answers):
-						if d == data and isActive(i):
-							return getInfo(i)
-
-
-	def blink(self, deviceIndex, buzzIndex):
-		self.turnOn(deviceIndex, buzzIndex)
-		time.sleep(0.2)
-		self.turnOff(deviceIndex, buzzIndex)
-		time.sleep(0.2)
-		self.turnOn(deviceIndex, buzzIndex)
-		time.sleep(0.2)
-		self.turnOff(deviceIndex, buzzIndex)
-
-	def getDevice(self, index):
-		return self.devices[index]
-
-	def close(self):
-		for dev in self.devices:
-			dev.close()
+				data = ControllerSignal(device_index, device.read(5))
+				if data.is_valid() and data.matches(device_index, controller_index, button_index):
+					return data

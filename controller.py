@@ -75,8 +75,8 @@ class BuzzerController():
 	def light_off(self, buzz_index):
 		self.buzzer_lights.off(buzz_index)
 	
-	def light_blink(self, buzz_index, times=3, sleep_duration=0.2):
-		self.buzzer_lights.blink(buzz_index, times, sleep_duration)
+	def light_blink(self, times=3, sleep_duration=0.2):
+		self.buzzer_lights.blink(self.controller_index, times, sleep_duration)
 	
 	def get_buzzer_lights(self):
 		return self.buzzer_lights

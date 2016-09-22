@@ -1,3 +1,5 @@
+import time
+
 class BuzzerLights():
 	"""
 		Represents the 4 ligts (red button) for a given device
@@ -19,5 +21,5 @@ class BuzzerLights():
 			self.on(controller_index)
 			time.sleep(sleep_duration)
 			self.off(controller_index)
-			time.sleep_duration(sleep_duration)
+			time.sleep(sleep_duration)
 
